@@ -2,6 +2,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from attention import SelfAttention, CrossAttention
+from typing import Union, Literal
+from config import EXPERIMENT_FOLDER
 
 class TimeEmbedding(nn.Module):
     def __init__(self, n_embd):
@@ -183,12 +185,21 @@ class Upsample(nn.Module):
         return self.conv(x)
 
 class SwitchSequential(nn.Sequential):
-    def forward(self, x, context, time):
-        for layer in self:
+    def forward(self, x, context, time, mode=Union[Literal["enc"], Literal["bott"], Literal["dec"]]):
+        self.features = {}
+        for idx, layer in enumerate(self):
             if isinstance(layer, UNET_AttentionBlock):
                 x = layer(x, context)
+                resolution = x.shape[-1]
+                if resolution in [16, 32]:
+                    # Save the output of the attention block in the features dictionary with the resolution in the key
+                    self.features[f"unet_attn_{mode}_{resolution}_{idx}"] = x
             elif isinstance(layer, UNET_ResidualBlock):
                 x = layer(x, time)
+                resolution = x.shape[-1]
+                if resolution in [16, 32]:
+                    # Save the output of the residual block in the features dictionary with the resolution in the key
+                    self.features[f"unet_resid_{mode}_{resolution}_{idx}"] = x
             else:
                 x = layer(x)
         return x
@@ -196,6 +207,7 @@ class SwitchSequential(nn.Sequential):
 class UNET(nn.Module):
     def __init__(self):
         super().__init__()
+        self.unet_features = {}
         self.encoders = nn.ModuleList([
             # (Batch_Size, 4, Height / 8, Width / 8) -> (Batch_Size, 320, Height / 8, Width / 8)
             SwitchSequential(nn.Conv2d(4, 320, kernel_size=3, padding=1)),
@@ -287,19 +299,24 @@ class UNET(nn.Module):
         # x: (Batch_Size, 4, Height / 8, Width / 8)
         # context: (Batch_Size, Seq_Len, Dim) 
         # time: (1, 1280)
+        
+        self.unet_features = {} # Reset the features dictionary for each forward pass (i.e. for each time step)
 
         skip_connections = []
         for layers in self.encoders:
-            x = layers(x, context, time)
+            x = layers(x, context, time, "enc")
             skip_connections.append(x)
+            self.unet_features.update(layers.features)          # Save the features of the encoder's layer
 
-        x = self.bottleneck(x, context, time)
+        x = self.bottleneck(x, context, time, "bott")
+        self.unet_features.update(self.bottleneck.features)     # Save the features of the bottleneck layer
 
         for layers in self.decoders:
             # Since we always concat with the skip connection of the encoder, the number of features increases before being sent to the decoder's layer
             x = torch.cat((x, skip_connections.pop()), dim=1) 
-            x = layers(x, context, time)
-        
+            x = layers(x, context, time, "dec")
+            self.unet_features.update(layers.features)          # Save the features of the decoder's layer
+
         return x
 
 
@@ -331,16 +348,20 @@ class Diffusion(nn.Module):
         self.unet = UNET()
         self.final = UNET_OutputLayer(320, 4)
     
-    def forward(self, latent, context, time):
+    def forward(self, latent, context, time, t, input_image_path):
         # latent: (Batch_Size, 4, Height / 8, Width / 8)
         # context: (Batch_Size, Seq_Len, Dim)
         # time: (1, 320)
+        # t: int, is the inference timestep
 
         # (1, 320) -> (1, 1280)
         time = self.time_embedding(time)
         
         # (Batch, 4, Height / 8, Width / 8) -> (Batch, 320, Height / 8, Width / 8)
         output = self.unet(latent, context, time)
+        
+        # Save the features of the UNET model to a compressed file
+        torch.save(self.unet.unet_features, f"{EXPERIMENT_FOLDER}/{input_image_path.stem}/{t}_unet_features.pt")
         
         # (Batch, 320, Height / 8, Width / 8) -> (Batch, 4, Height / 8, Width / 8)
         output = self.final(output)

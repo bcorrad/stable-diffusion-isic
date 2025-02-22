@@ -12,6 +12,7 @@ def generate(
     prompt,
     uncond_prompt=None,
     input_image=None,
+    input_image_path=None,
     strength=0.8,
     do_cfg=True,
     cfg_scale=7.5,
@@ -115,7 +116,7 @@ def generate(
         diffusion.to(device)
 
         timesteps = tqdm(sampler.timesteps)
-        for i, timestep in enumerate(timesteps):
+        for t, timestep in enumerate(timesteps):
             # (1, 320)
             time_embedding = get_time_embedding(timestep).to(device)
 
@@ -128,7 +129,7 @@ def generate(
 
             # model_output is the predicted noise
             # (Batch_Size, 4, Latents_Height, Latents_Width) -> (Batch_Size, 4, Latents_Height, Latents_Width)
-            model_output = diffusion(model_input, context, time_embedding)
+            model_output = diffusion(model_input, context, time_embedding, t, input_image_path)
 
             if do_cfg:
                 output_cond, output_uncond = model_output.chunk(2)
@@ -138,6 +139,8 @@ def generate(
             latents = sampler.step(timestep, latents, model_output)
 
         to_idle(diffusion)
+        
+        # features = diffusion.unet.unet_features
 
         decoder = models["decoder"]
         decoder.to(device)
