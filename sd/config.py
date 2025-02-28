@@ -8,7 +8,8 @@ os.makedirs(EXPERIMENT_FOLDER, exist_ok=True)
 
 ## DATABASE
 ISIC_DB_FOLDER = "/repo/bonechi/Datasets/Dataset_Nevi/ISIC_Cleaned/Cleaned_Balanced/Solo_Nei_e_Melanomi"
-
+ISIC_DB_IMAGES = "train_balanced/balanced/images"
+ISIC_DB_METADATA_CSV = "/repo/bonechi/Datasets/Dataset_Nevi/ISIC_Cleaned/Cleaned_Balanced/Solo_Nei_e_Melanomi/train_balanced/training_cleaned.csv"
 
 ## CONFIGURATION
 DEVICE = "cpu"
@@ -46,7 +47,7 @@ INPUT_IMAGE_PATHS = None    # If I2I_GENERATION is enabled and INPUT_IMAGE_PATHS
 # ... OR you can Read all the images given a folder (both .png and .jpg)
 # INPUT_IMAGE_PATHS = list(Path(os.path.join(PROJECT_ROOT, "images")).rglob("*.jpg")) + list(Path(os.path.join(PROJECT_ROOT, "images")).rglob("*.png"))
 # Number of dataset images to be given to SDM 
-NUMBER_OF_IMAGES = 1    
+NUMBER_OF_IMAGES = 10    
 
 # STRENGTH parameter: Higher values means more noise will be added to the input image, so the result will further from the input image.
 # Lower values means less noise is added to the input image, so output will be closer to the input image.
@@ -54,5 +55,5 @@ STRENGTH = 0.9
 
 ## SAMPLER
 SAMPLER = "ddpm"
-NUM_INFERENCE_STEPS = 2
+NUM_INFERENCE_STEPS = 2         # no noise added
 SEED = 42

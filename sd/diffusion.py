@@ -308,8 +308,8 @@ class UNET(nn.Module):
             skip_connections.append(x)
             self.unet_features.update(layers.features)          # Save the features of the encoder's layer
 
-        x = self.bottleneck(x, context, time, "bott")
-        self.unet_features.update(self.bottleneck.features)     # Save the features of the bottleneck layer
+        x = self.bottleneck(x, context, time)
+        self.unet_features[f"unet_bottleneck_8"] = x     # Save the features of the bottleneck layer
 
         for layers in self.decoders:
             # Since we always concat with the skip connection of the encoder, the number of features increases before being sent to the decoder's layer
@@ -361,7 +361,7 @@ class Diffusion(nn.Module):
         output = self.unet(latent, context, time)
         
         # Save the features of the UNET model to a compressed file
-        torch.save(self.unet.unet_features, f"{EXPERIMENT_FOLDER}/{input_image_path.stem}/{t}_unet_features.pt")
+        torch.save(self.unet.unet_features, f"{EXPERIMENT_FOLDER}/{input_image_path}/{t}_unet_features.pt")
         
         # (Batch, 320, Height / 8, Width / 8) -> (Batch, 4, Height / 8, Width / 8)
         output = self.final(output)
